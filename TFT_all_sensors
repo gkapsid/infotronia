@@ -1,0 +1,254 @@
+/***************************************************/
+/* 
+
+This code was finally used with one Arduino UNO.
+TFT refresh takes some time!! 
+
+It includes:
+1) DHT11 temp and humidity sensor
+2) Ultrasonic distance sensor 
+3) Light sensor (voltage divider with LDR)
+4) Servo motor
+5) Output for lights
+6) TFT color display with a refresh routine 
+The TFT displays temperature and humidity
+
+
+
+*/
+
+
+#include "SPI.h"
+#include "Adafruit_GFX.h"
+#include "Adafruit_ILI9341.h"
+
+#include <dht.h>
+#include <Servo.h> 
+#include <NewPing.h>
+
+// For the Adafruit shield, these are the default.
+#define TFT_DC 4
+#define TFT_CS 2
+// Those lines added by me because I didn't use the hardware SPI pins. It may be removed if hardware SPI pins are used
+// for Leonardo and UNO infos 
+// https://www.arduino.cc/en/Reference/TFTLibrary
+// https://www.arduino.cc/en/Reference/SPI
+// BE CAREFULL with Leonardo! the default SPI pins are at the ICSP connector (6-pin)
+#define TFT_MOSI 5
+#define TFT_CLK 6
+#define TFT_RST 3
+#define TFT_MISO 7 
+
+
+#define DHT11_PIN A1
+#define TRIGGER_PIN  12  // Arduino pin tied to trigger pin on the ultrasonic sensor.
+#define ECHO_PIN     13  // Arduino pin tied to echo pin on the ultrasonic sensor.
+#define MAX_DISTANCE 200 // Maximum distance we want to ping for (in centimeters). Maximum sensor distance is rated at 400-500 runTime 0 //Keeps time to refresh the TFT.
+#define warnLight 8 //warning light pin
+
+//δημιουργα αντικειμενων
+
+// Use hardware SPI (on Uno, #13, #12, #11) and the above for CS/DC
+//Adafruit_ILI9341 tft = Adafruit_ILI9341(TFT_CS, TFT_DC); // BE carefull to uncoment this line if hardware SPI is used
+// If using the breakout, change pins as desired
+Adafruit_ILI9341 tft = Adafruit_ILI9341(TFT_CS, TFT_DC, TFT_MOSI, TFT_CLK, TFT_RST, TFT_MISO);
+
+dht DHT; //Humidity Temperature sensor object
+NewPing sonar(TRIGGER_PIN, ECHO_PIN, MAX_DISTANCE); // NewPing setup of pins and maximum distance.
+Servo myservo;  // create servo object to control a servo 
+
+unsigned long runTime = 0; //Used to control refresh rate of TFT
+int led = 10; //Village lights control pin
+int sensorPin = A2; //Light sensor
+int sensorValue = 0;  // variable to store the value coming from the light sensor
+int pos = 0;    // variable to store the servo position 
+//variables to keep the safety bar in "up" or "down" position
+boolean up = true;
+boolean down = false; 
+
+int inPin = 11;         // the number of the input pin
+int outPin= 17;       // the number of the output pin
+
+int state = LOW;      // the current state of the output pin
+int reading;           // the current reading from the input pin
+int previous = LOW;    // the previous reading from the input pin
+
+// the follow variables are long's because the time, measured in miliseconds,
+// will quickly become a bigger number than can be stored in an int.
+long time = 0;         // the last time the output pin was toggled
+long debounce = 200;   // the debounce time, increase if the output flickers
+
+
+void setup() {
+  tft.begin();
+  uint8_t x = tft.readcommand8(ILI9341_RDMODE);
+tft.fillScreen(ILI9341_BLACK);
+  myservo.attach(9);  // attaches the servo on pin 9 to the servo object 
+   
+   // initialize the digital pin as an output.
+  pinMode(led, OUTPUT); 
+    pinMode(inPin, INPUT_PULLUP);
+  pinMode(outPin, OUTPUT);
+  
+  digitalWrite(warnLight, LOW);
+  
+  Serial.begin(9600);
+  Serial.println(testRoundRects()); 
+}
+
+
+void loop(void) {
+Serial.println(digitalRead(3));
+  
+    tft.setRotation(1);//να μπει στο setup;
+    if (millis() - runTime >= 15000) { // Execute every 500ms
+    runTime = millis();
+    
+    tft.fillScreen(ILI9341_BLACK);
+        testText();
+
+}
+  //  testText();
+  
+    // Lights code φωτα οικισμου
+  // ************************************************//
+  sensorValue = analogRead(sensorPin); 
+   if (sensorValue > 500) {
+    digitalWrite(led, HIGH);
+    //Serial.println(digitalRead(led));
+  } 
+  else {
+    digitalWrite(led,LOW); 
+    //Serial.println(digitalRead(led));
+  }
+  //Serial.print("A2 ");
+  //Serial.println(sensorValue);
+ 
+  //****************************************************//
+ // DHT11 Code Υγρασια θερμοκρασια
+  //****************************************************//
+  int chk = DHT.read11(DHT11_PIN);
+  Serial.print("Temperature = ");
+  Serial.println(DHT.temperature);
+  Serial.print("Humidity = ");
+  Serial.println(DHT.humidity);
+  delay(1000);
+  
+  //**************************************************//
+  
+ //****************************************************//   
+  // Μετρηση αποστασης και λεγχος συστηματος ασφαλειας
+  //*************************************************//
+  int dist = sonar.ping_cm();
+  //Serial.println(dist);
+  
+  Serial.print(digitalRead(warnLight));
+  if (dist<25 && up == true){
+    up = false;
+    down = true;
+  //Serial.println("dist<27");  
+  //κωδικας για να αναβοσβηνουν τα φωτα προειδοποιησης
+    digitalWrite(warnLight, HIGH);   // turn the LED on (HIGH is the voltage level)
+    Serial.println("on");  
+  //delay(1000);               // wait for a second
+  //digitalWrite(warnLight, LOW);    // turn the LED off by making the voltage LOW
+   //Serial.println("off"); 
+  //delay(1000);  
+  for(pos = 05; pos < 75; pos += 1)  // goes from 0 degrees to 180 degrees 
+  {                                  // in steps of 1 degree 
+    myservo.write(pos);              // tell servo to go to position in variable 'pos' 
+    delay(15);                       // waits 15ms for the servo to reach the position 
+  } 
+  
+  }
+  else if (dist>=27 && down==true) {
+    /*up = true;
+    down = false; */
+    //Serial.println("dist>27");
+    //Serial.println(up);
+  //Serial.println(down);
+  //delay(1000);
+  digitalWrite(warnLight, LOW);
+  for(pos = 75; pos>=05; pos-=1)     // goes from 180 degrees to 0 degrees 
+  {                                
+    myservo.write(pos);              // tell servo to go to position in variable 'pos' 
+    delay(15);                       // waits 15ms for the servo to reach the position 
+  } 
+  up = true;
+  down = false;
+  }
+
+  delay(50);                     // Wait 50ms between pings (about 20 pings/sec). 29ms should be the shortest delay between pings.
+  Serial.print("Distance: ");
+  Serial.print(sonar.ping_cm()); // Send ping, get distance in cm and print result (0 = outside set distance range)
+  Serial.println("cm");
+
+//κωδικας για το button debounce
+reading =! digitalRead(inPin);
+
+  // if the input just went from LOW and HIGH and we've waited long enough
+  // to ignore any noise on the circuit, toggle the output pin and remember
+  // the time
+  if (reading == HIGH && previous == LOW && millis() - time > debounce) {
+    if (state == HIGH)
+      state = LOW;
+    else
+      state = HIGH;
+
+    time = millis();    
+  }
+
+  digitalWrite(outPin, state);
+
+  previous = reading;
+  }
+
+// TFT control function
+unsigned long testText() {
+  //tft.fillScreen(ILI9341_BLACK);
+ // unsigned long start = micros();
+  tft.setCursor(70, 40);
+  tft.setTextColor(ILI9341_WHITE);  tft.setTextSize(3);
+  tft.println("INFOTRONIA");
+   tft.setCursor(90, 70);
+  tft.println("PROJECT");
+  tft.println();
+  tft.setTextColor(ILI9341_YELLOW); tft.setTextSize(3);
+  tft.setCursor(40,110);
+  tft.println("WEATHER STATION");
+  tft.println();
+  tft.setTextColor(ILI9341_RED);    tft.setTextSize(4);
+  tft.setCursor(60,140);
+  //tft.print("Temperature ");
+  tft.print(DHT.temperature);
+  tft.print(" C");
+  tft.println();
+  tft.setTextColor(ILI9341_RED);    tft.setTextSize(4);
+  tft.setCursor(60,180);
+  //tft.print("Humidity ");
+  tft.print(DHT.humidity);
+  tft.print(" %");
+  
+  /*tft.setTextColor(ILI9341_GREEN);
+  tft.setTextSize(5);
+  tft.println("Goodmorning!");*/
+
+ // return micros() - start;
+}
+unsigned long testRoundRects() {
+  unsigned long start;
+  int           w, i, i2,
+                cx = tft.width()  / 2 - 1,
+                cy = tft.height() / 2 - 1;
+
+  tft.fillScreen(ILI9341_BLACK);
+  w     = min(tft.width(), tft.height());
+  start = micros();
+  for(i=0; i<w; i+=6) {
+    i2 = i / 2;
+    tft.drawRoundRect(cx-i2, cy-i2, i, i, i/8, tft.color565(0, 0, i));
+  }
+
+  return micros() - start;
+}
+
