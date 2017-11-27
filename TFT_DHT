@@ -1,0 +1,143 @@
+/***************************************************/
+/* 
+
+Code for TFT and DHT11 only. 
+
+It includes:
+1) DHT11 temp and humidity sensor
+2) TFT color display with a refresh routine 
+3) Fan which operates when temperature high
+
+The TFT displays temperature and humidity
+
+The TFT display and the humidity/temp sensor + a fan which is activated according the temp
+were separated by the rest of the system.
+
+Tested 22/11/2017 OK
+*/
+
+
+#include "SPI.h"
+#include "Adafruit_GFX.h"
+#include "Adafruit_ILI9341.h"
+#include <dht.h>
+
+// For the Adafruit shield, these are the default.
+
+// Those lines added by me because I didn't use the hardware SPI pins. It may be removed if hardware SPI pins are used
+// for Leonardo and UNO infos 
+// https://www.arduino.cc/en/Reference/TFTLibrary
+// https://www.arduino.cc/en/Reference/SPI
+// BE CAREFULL with Leonardo! the default SPI pins are at the ICSP connector (6-pin)
+
+#define TFT_CS 2
+#define TFT_RST 3
+#define TFT_DC 4
+#define TFT_MOSI 5
+#define TFT_CLK 6
+#define TFT_MISO 7 
+#define DHT11_PIN A1
+#define FAN 12
+//δημιουργα αντικειμενων - create objects
+
+// Use hardware SPI (on Uno, #13, #12, #11) and the above for CS/DC
+//Adafruit_ILI9341 tft = Adafruit_ILI9341(TFT_CS, TFT_DC); // BE carefull to uncoment this line if hardware SPI is used
+// If using the breakout, change pins as desired
+
+Adafruit_ILI9341 tft = Adafruit_ILI9341(TFT_CS, TFT_DC, TFT_MOSI, TFT_CLK, TFT_RST, TFT_MISO);
+
+dht DHT; //Humidity Temperature sensor object
+
+unsigned long runTime = 0; //Used to control refresh rate of TFT
+
+
+void setup() {
+  
+  pinMode(FAN, OUTPUT);
+  tft.begin();
+  uint8_t x = tft.readcommand8(ILI9341_RDMODE);
+  tft.fillScreen(ILI9341_BLACK); 
+  Serial.begin(9600);
+
+}
+
+
+void loop(void) {
+ 
+ tft.setRotation(1);//να μπει στο setup;
+    if (millis() - runTime >= 15000) { // Execute every 15 sec
+    runTime = millis();
+    
+    tft.fillScreen(ILI9341_BLACK);
+    TFTText();
+
+}
+  
+  //****************************************************//
+ // DHT11 Code Υγρασια θερμοκρασια
+  //****************************************************//
+  int chk = DHT.read11(DHT11_PIN);
+  Serial.print("Temperature = ");
+  Serial.println(DHT.temperature);
+  Serial.print("Humidity = ");
+  Serial.println(DHT.humidity);
+  delay(1000);
+  
+  //**************************************************//
+  //************************************************* //
+  // FAN activation code
+  //************************************************//
+  if (DHT.temperature>20 ){
+  digitalWrite(12, HIGH);
+  }
+  else if (DHT.temperature<18){
+  digitalWrite(12, LOW);
+  }
+  Serial.println(DHT.temperature);
+  //***********************************************//
+} 
+// TFT control function
+unsigned long TFTText() {
+  //tft.fillScreen(ILI9341_BLACK);
+ // unsigned long start = micros();
+  tft.setCursor(70, 40);
+  tft.setTextColor(ILI9341_WHITE);  tft.setTextSize(3);
+  tft.println("INFOTRONIA");
+  tft.setCursor(90, 70);
+  tft.println("PROJECT");
+  tft.println();
+  tft.setTextColor(ILI9341_YELLOW); tft.setTextSize(3);
+  tft.setCursor(40,110);
+  tft.println("WEATHER STATION");
+  tft.println();
+  tft.setTextColor(ILI9341_RED);    tft.setTextSize(4);
+  tft.setCursor(60,140);
+  //tft.print("Temperature ");
+  tft.print(DHT.temperature);
+  tft.print(" C");
+  tft.println();
+  tft.setTextColor(ILI9341_RED);    tft.setTextSize(4);
+  tft.setCursor(60,180);
+  //tft.print("Humidity ");
+  tft.print(DHT.humidity);
+  tft.print(" %");
+  
+}
+
+unsigned long testRoundRects() {
+  unsigned long start;
+  int           w, i, i2,
+                cx = tft.width()  / 2 - 1,
+                cy = tft.height() / 2 - 1;
+
+  tft.fillScreen(ILI9341_BLACK);
+  w     = min(tft.width(), tft.height());
+  start = micros();
+  for(i=0; i<w; i+=6) {
+    i2 = i / 2;
+    tft.drawRoundRect(cx-i2, cy-i2, i, i, i/8, tft.color565(0, 0, i));
+  }
+
+  return micros() - start;
+}
+
